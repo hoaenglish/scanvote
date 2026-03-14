@@ -55,14 +55,27 @@ Dynamsoft.DBR.BarcodeReader.license = "DLS2eyJoYW5kc2hha2VDb2RlIjoiMTA1Mjk4MTk0L
 Dynamsoft.DBR.BarcodeReader.engineResourcePath = "dynamsoft/";
 
 // ================= LOAD SĨ SỐ =================
-fetch("dynamsoft/student.txt").then(r => r.text()).then(t => {
-    t.split("\n").forEach(line => {
-        let p = line.trim().split("|");
-        if(p.length >= 2) validStudentIDs.add(p[1]);
+console.log("Đang bắt đầu tải student.txt...");
+
+fetch("./student.txt", { cache: "no-store" }) // Thêm ./ và tắt cache để luôn lấy bản mới nhất
+    .then(r => {
+        if (!r.ok) throw new Error(`Không thấy file student.txt (Mã lỗi: ${r.status})`);
+        return r.text();
+    })
+    .then(t => {
+        console.log("Dữ liệu nhận được:", t);
+        const lines = t.trim().split("\n");
+        lines.forEach(line => {
+            let p = line.trim().split("|");
+            if(p.length >= 2) validStudentIDs.add(p[1]);
+        });
+        siSo = validStudentIDs.size;
+        updateStatus("🏫 Đã tải " + siSo + " học sinh.\nHãy chọn biển để vote!");
+    })
+    .catch(err => {
+        console.error("Lỗi cụ thể:", err);
+        updateStatus("❌ Lỗi: " + err.message + ". Kiểm tra lại tên file trên GitHub!");
     });
-    siSo = validStudentIDs.size;
-    updateStatus("🏫 Đã tải " + siSo + " học sinh.\nHãy chọn biển để vote!");
-});
 
 // ================= LẮNG NGHE SESSION =================
 db.doc("system/activeVoteSession").onSnapshot(async (doc) => {
