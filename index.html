@@ -7,7 +7,7 @@
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-<script src="dynamsoft/dbr.bundle.js"></script>
+<script src="./dynamsoft/dbr.bundle.js"></script>
 
 <style>
 * { box-sizing: border-box; touch-action: manipulation; }
@@ -50,9 +50,7 @@ let currentSessionId = null; // Dùng Id dài (Session_2024...)
 let currentSignIndex = null; // Dùng số (0, 1, 2, 3)
 let scannedInSession = new Set();
 let sessionCompleted = false;
-/* BARCODE SETTINGS*/
-Dynamsoft.DBR.BarcodeReader.license = "DLS2eyJoYW5kc2hha2VDb2RlIjoiMTA1Mjk4MTk0LU1UQTFNams0TVRrMExYZGxZaTFVY21saGJGQnliMm8iLCJtYWluU2VydmVyVVJMIjoiaHR0cHM6Ly9tZGxzLmR5bmFtc29mdG9ubGluZS5jb20vIiwib3JnYW5pemF0aW9uSUQiOiIxMDUyOTgxOTQiLCJzdGFuZGJ5U2VydmVyVVJMIjoiaHR0cHM6Ly9zZGxzLmR5bmFtc29mdG9ubGluZS5jb20vIiwiY2hlY2tDb2RlIjoxOTg2ODM2Mjc1fQ==";
-Dynamsoft.DBR.BarcodeReader.engineResourcePath = "dynamsoft/";
+
 
 // ================= LOAD SĨ SỐ =================
 console.log("Đang bắt đầu tải student.txt...");
@@ -76,6 +74,11 @@ fetch("./student.txt", { cache: "no-store" }) // Thêm ./ và tắt cache để 
         console.error("Lỗi cụ thể:", err);
         updateStatus("❌ Lỗi: " + err.message + ". Kiểm tra lại tên file trên GitHub!");
     });
+
+
+/* BARCODE SETTINGS*/
+Dynamsoft.DBR.BarcodeReader.license = "DLS2eyJoYW5kc2hha2VDb2RlIjoiMTA1Mjk4MTk0LU1UQTFNams0TVRrMExYZGxZaTFVY21saGJGQnliMm8iLCJtYWluU2VydmVyVVJMIjoiaHR0cHM6Ly9tZGxzLmR5bmFtc29mdG9ubGluZS5jb20vIiwib3JnYW5pemF0aW9uSUQiOiIxMDUyOTgxOTQiLCJzdGFuZGJ5U2VydmVyVVJMIjoiaHR0cHM6Ly9zZGxzLmR5bmFtc29mdG9ubGluZS5jb20vIiwiY2hlY2tDb2RlIjoxOTg2ODM2Mjc1fQ==";
+Dynamsoft.DBR.BarcodeReader.engineResourcePath = "dynamsoft/";
 
 // ================= LẮNG NGHE SESSION =================
 db.doc("system/activeVoteSession").onSnapshot(async (doc) => {
