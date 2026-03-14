@@ -211,7 +211,7 @@ async function stopScan() {
     document.getElementById("startBtn").disabled = false;
     document.getElementById("stopBtn").disabled = true;
     if(currentSessionId && !sessionCompleted) {
-        updateStatus("⏸️ Đã dừng quét biển " + currentSession + "\n(" + scannedInSession.size + "/" + siSo + " học sinh)");
+        updateStatus("⏸️ Đã dừng quét biển " + currentSessionId + "\n(" + scannedInSession.size + "/" + siSo + " học sinh)");
     }
 }
 
