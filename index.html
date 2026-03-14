@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>ScanVote</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="dynamsoft/dbr.bundle.js"></script>
+
+<style>
+* { box-sizing: border-box; touch-action: manipulation; }
+body { font-family: sans-serif; padding: 10px; background: #f0f2f5; margin: 0; text-align: center; }
+#status { font-weight: bold; margin: 10px auto; min-height: 65px; padding: 15px; background: white; border-radius: 12px; max-width: 400px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); font-size: 16px; }
+#scanner-root { width: min(90vw, 400px); aspect-ratio: 1; margin: 0 auto; position: relative; border: 4px solid #fff; border-radius: 20px; overflow: hidden; background: #000; }
+.dce-video-container video { object-fit: contain !important; }
+.row { display: flex; gap: 8px; justify-content: center; max-width: 400px; margin: 15px auto; }
+button { padding: 15px; flex: 1; border-radius: 10px; border: none; color: white; font-weight: bold; font-size: 16px; cursor: pointer; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+</style>
+</head>
+<body>
+
+<div id="status">⏳ Đang tải sĩ số...</div>
+<div id="scanner-root">
+  <div id="scanner-ui">
+    <div class="dce-video-container"></div>
+  </div>
+</div>
+
+<div class="row">
+    <button id="startBtn" onclick="startScan()" style="background:#28a745;">▶️ BẮT ĐẦU</button>
+    <button id="stopBtn" onclick="stopScan()" style="background:#dc3545;" disabled>⏹️ DỪNG</button>
+</div>
+
+<script>
+firebase.initializeApp({
+    apiKey: "AIzaSyAsD7XOkOm1OoSkTeThBcBXiAuCxKYOGkk",
+    projectId: "hoa-english"
+});
+const db = firebase.firestore();
+
+let validStudentIDs = new Set();
+let siSo = 0;
+
+let scanner = null;
+let isScanning = false;
+let currentSessionId = null; // Dùng Id dài (Session_2024...)
+let currentSignIndex = null; // Dùng số (0, 1, 2, 3)
+let scannedInSession = new Set();
+let sessionCompleted = false;
+/* BARCODE SETTINGS*/
+Dynamsoft.DBR.BarcodeReader.license = "DLS2eyJoYW5kc2hha2VDb2RlIjoiMTA1Mjk4MTk0LU1UQTFNams0TVRrMExYZGxZaTFVY21saGJGQnliMm8iLCJtYWluU2VydmVyVVJMIjoiaHR0cHM6Ly9tZGxzLmR5bmFtc29mdG9ubGluZS5jb20vIiwib3JnYW5pemF0aW9uSUQiOiIxMDUyOTgxOTQiLCJzdGFuZGJ5U2VydmVyVVJMIjoiaHR0cHM6Ly9zZGxzLmR5bmFtc29mdG9ubGluZS5jb20vIiwiY2hlY2tDb2RlIjoxOTg2ODM2Mjc1fQ==";
+Dynamsoft.DBR.BarcodeReader.engineResourcePath = "dynamsoft/";
+
+// ================= LOAD SĨ SỐ =================
+fetch("student.txt").then(r => r.text()).then(t => {
+    t.split("\n").forEach(line => {
+        let p = line.trim().split("|");
+        if(p.length >= 2) validStudentIDs.add(p[1]);
+    });
+    siSo = validStudentIDs.size;
+    updateStatus("🏫 Đã tải " + siSo + " học sinh.\nHãy chọn biển để vote!");
+});
+
+// ================= LẮNG NGHE SESSION =================
+db.doc("system/activeVoteSession").onSnapshot(async (doc) => {
+    const data = doc.data();
+
+    // Nếu không có session nào đang chạy
+    if (!data || !data.sessionId) {
+        currentSessionId = null;
+        currentSignIndex = null;
+        scannedInSession.clear();
+        updateStatus("⚪ Chờ máy tính chọn biển...");
+        if(isScanning) stopScan();
+        return;
+    }
+
+    // Phát hiện Session mới
+    if (currentSessionId !== data.sessionId) {
+        currentSessionId = data.sessionId; 
+        currentSignIndex = data.signIndex; 
+        
+        scannedInSession.clear(); 
+        sessionCompleted = false;
+
+        updateStatus(`🟢 Sẵn sàng quét biển số: ${currentSignIndex + 1}`);
+        // Nếu đang quét dở biển cũ, thì phải dừng scanner cũ để sẵn sàng cho cái mới
+        if(isScanning) {
+             updateStatus(`📷 Đang quét biển ${currentSignIndex + 1}...`);
+        }
+        if(navigator.vibrate) navigator.vibrate(100);
+    }
+});
+// ================= RESET SESSION =================
+async function resetSession() {
+    currentSignIndex = null;
+    scannedInSession.clear();
+    sessionCompleted = false;
+    if(isScanning) await stopScan();
+    updateStatus("⚪ Chờ chọn biển báo...");
+}
+
+
+// ================= START SCAN =================
+async function startScan() {
+    if(!currentSessionId) {
+        updateStatus("⚠️ Chưa có biển được chọn...");
+        return;
+    }
+
+    if(sessionCompleted) {
+        updateStatus("✅ Đã quét đủ " + siSo + "/" + siSo + " học sinh cho biển " + currentSessionId);
+        return;
+    }
+
+    try {
+    	if(!scanner) {
+        scanner = await Dynamsoft.DBR.BarcodeScanner.createInstance();
+            await scanner.setUIElement(document.getElementById('scanner-ui'));
+
+            let settings = await scanner.getRuntimeSettings();
+            settings.expectedBarcodesCount = 1;
+            settings.barcodeFormatIds = Dynamsoft.DBR.EnumBarcodeFormat.BF_QR_CODE;
+            await scanner.updateRuntimeSettings(settings);
+
+            scanner.onFrameRead = results => {
+                results.forEach(res => handleResult(res.barcodeText, res));
+            };
+        }
+
+        await scanner.show();
+        isScanning = true;
+
+        document.getElementById("startBtn").disabled = true;
+        document.getElementById("stopBtn").disabled = false;
+
+        updateStatus("📷 Đang quét biển " + currentSessionId + "...\n(" + scannedInSession.size + "/" + siSo + " học sinh)");
+    } catch (e) { alert(e.message); }
+}
+
+// ================= HANDLE RESULT =================
+function handleResult(txt, res) {
+    if(!isScanning || !currentSessionId || sessionCompleted) return;
+    if(!validStudentIDs.has(txt)) return;
+    if(scannedInSession.has(txt)) return;
+
+    let answer = "";
+    if(res.localizationResult) {
+        const loc = res.localizationResult;
+        const angle = (Math.atan2(loc.y2 - loc.y1, loc.x2 - loc.x1) * 180 / Math.PI + 360) % 360;
+        if (angle >= 315 || angle < 45) answer = "A";
+        else if (angle >= 45 && angle < 135) answer = "D";
+        else if (angle >= 135 && angle < 225) answer = "C";
+        else answer = "B";
+    }
+
+    if(answer === "") return;
+    scannedInSession.add(txt);
+
+    // --- SỬA ĐỊA CHỈ GỬI TẠI ĐÂY ---
+    db.collection("voteSessions")
+      .doc(currentSessionId)
+      .collection("answers")
+      .doc(txt)
+      .set({
+          studentId: txt,
+          answer: answer,
+          timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+    if(navigator.vibrate) navigator.vibrate(40);
+
+    if(scannedInSession.size >= siSo) {
+        completeSession();
+    } else {
+        updateStatus(`✔️ HS ${txt} → ${answer}\n📷 Biển ${currentSignIndex + 1}: ${scannedInSession.size}/${siSo}`);
+    }
+}
+
+
+// ================= COMPLETE SESSION =================
+async function completeSession() {
+    sessionCompleted = true;
+    isScanning = false;
+
+    if(scanner) {
+        await scanner.hide();
+    }
+
+    document.getElementById("startBtn").disabled = false;
+    document.getElementById("stopBtn").disabled = true;
+
+    updateStatus(`✅ Đã quét đủ ${siSo}/${siSo} HS!\n📋 Hoàn thành biển: ${currentSignIndex + 1}`);
+
+    if(navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 200]);
+
+    // Cập nhật trạng thái session cụ thể này thành đã xong
+    db.collection("voteSessions").doc(currentSessionId).update({
+        active: false//,
+        //status: "completed"
+    });
+}
+
+// ================= STOP =================
+async function stopScan() {
+    isScanning = false;
+    if(scanner) await scanner.hide();
+    document.getElementById("startBtn").disabled = false;
+    document.getElementById("stopBtn").disabled = true;
+    if(currentSessionId && !sessionCompleted) {
+        updateStatus("⏸️ Đã dừng quét biển " + currentSession + "\n(" + scannedInSession.size + "/" + siSo + " học sinh)");
+    }
+}
+
+// ================= STATUS =================
+function updateStatus(msg){
+    document.getElementById("status").innerText = msg;
+}
+</script>
+</body>
+</html>
