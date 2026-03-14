@@ -55,7 +55,7 @@ Dynamsoft.DBR.BarcodeReader.license = "DLS2eyJoYW5kc2hha2VDb2RlIjoiMTA1Mjk4MTk0L
 Dynamsoft.DBR.BarcodeReader.engineResourcePath = "dynamsoft/";
 
 // ================= LOAD SĨ SỐ =================
-fetch("student.txt").then(r => r.text()).then(t => {
+fetch("dynamsoft/student.txt").then(r => r.text()).then(t => {
     t.split("\n").forEach(line => {
         let p = line.trim().split("|");
         if(p.length >= 2) validStudentIDs.add(p[1]);
